@@ -28,6 +28,7 @@ import math
 import time
 import random
 from torch.autograd import Variable
+from torch import clamp
 
 __conditioning_keys__ = {'concat': 'c_concat',
                          'crossattn': 'c_crossattn',
@@ -339,6 +340,7 @@ class DDPM(pl.LightningModule):
             mask = batch['inpaint_mask']
             inpaint = batch['inpaint_image']
             reference = batch['ref_imgs']
+            real_mask = batch['real_mask']
         else:
             x = batch[k]
         if len(x.shape) == 3:
@@ -348,7 +350,8 @@ class DDPM(pl.LightningModule):
         mask = mask.to(memory_format=torch.contiguous_format).float()
         inpaint = inpaint.to(memory_format=torch.contiguous_format).float()
         reference = reference.to(memory_format=torch.contiguous_format).float()
-        return x,inpaint,mask,reference
+        real_mask = real_mask.to(memory_format=torch.contiguous_format).float()
+        return x,inpaint,mask,reference,real_mask
 
     def shared_step(self, batch):
         x = self.get_input(batch, self.first_stage_key)
@@ -672,14 +675,16 @@ class LatentDiffusion(DDPM):
 
     @torch.no_grad()
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False,
-                  cond_key=None, return_original_cond=False, bs=None,get_mask=False,get_reference=False):
+                  cond_key=None, return_original_cond=False, bs=None,get_mask=False,get_reference=False,
+                  get_real_mask=False,get_mask_image=False):
         
-        x,inpaint,mask,reference = super().get_input(batch, k)
+        x,inpaint,mask,reference,real_mask = super().get_input(batch, k)
         if bs is not None:
             x = x[:bs]
             inpaint = inpaint[:bs]
             mask = mask[:bs]
             reference = reference[:bs]
+            real_mask = real_mask[:bs]
         x = x.to(self.device)
         encoder_posterior = self.encode_first_stage(x)
         z = self.get_first_stage_encoding(encoder_posterior).detach()
@@ -739,6 +744,10 @@ class LatentDiffusion(DDPM):
             out.append(mask)
         if get_reference:
             out.append(reference)
+        if get_real_mask:
+            out.append(real_mask)
+        if get_mask_image:
+            out.append(inpaint)
         return out
         
     @torch.no_grad()
@@ -1300,27 +1309,32 @@ class LatentDiffusion(DDPM):
 
 
     @torch.no_grad()
-    def log_images(self, batch, N=4, n_row=4, sample=True, ddim_steps=200, ddim_eta=1., return_keys=None,
+    def log_images(self, batch, N=4, n_row=4, sample=True, ddim_steps=100, ddim_eta=1., return_keys=None,
                    quantize_denoised=True, inpaint=False, plot_denoise_rows=False, plot_progressive_rows=False,
-                   plot_diffusion_rows=True, **kwargs):
+                   plot_diffusion_rows=False, **kwargs):
 
         use_ddim = ddim_steps is not None
 
         log = dict()
 
-        z, c, x, xrec, xc, mask, reference = self.get_input(batch, self.first_stage_key,
+        z, c, x, xrec, xc, mask, reference, real_mask, mask_image = self.get_input(batch, self.first_stage_key,
                                         return_first_stage_outputs=True,
                                         force_c_encode=True,
                                         return_original_cond=True,
                                         get_mask=True,
                                         get_reference=True,
+                                        get_real_mask=True,
+                                        get_mask_image=True,
                                         bs=N)
         N = min(x.shape[0], N)
         n_row = min(x.shape[0], n_row)
         log["inputs"] = x
         log["reconstruction"] = xrec
+        log["mask_image"] = mask_image
         log["mask"]=mask
         # log["reference"]=reference
+        log["real_mask"]=real_mask
+        
         if self.model.conditioning_key is not None:
             if hasattr(self.cond_stage_model, "decode"):
                 xc = self.cond_stage_model.decode(c)

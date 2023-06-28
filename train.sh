@@ -1,5 +1,8 @@
 python -u main.py \
---logdir models/Paint-by-Example \
---pretrained_model pretrained_models/sd-v1-4-modified-9channel.ckpt \
---base configs/v1.yaml \
---scale_lr False
+--logdir logs/Paint-by-Example \
+--pretrained_model /home/majiajian/code/diffusion/pretrain_model/model.ckpt \
+--base configs/polyp.yaml \
+-t
+
+#--resume logs/Paint-by-Example/2023-06-20T12-48-35_polyp \
+

@@ -301,109 +301,122 @@ def main():
         start_code = torch.randn([opt.n_samples, opt.C, opt.H // opt.f, opt.W // opt.f], device=device)
 
     precision_scope = autocast if opt.precision=="autocast" else nullcontext
-
+    dataset = OpenImageDataset("val", 0, {'dataset_dir': opt.image_path,
+              'image_size': 256})
     
-    with torch.no_grad():
-        with precision_scope("cuda"):
-            with model.ema_scope():
-                filename=os.path.basename(opt.image_path)
-                img_p = Image.open(opt.image_path).convert("RGB")
-                image_tensor = get_tensor()(img_p)
-                #resize the image_tensor
-                image_tensor = Resize([opt.H, opt.W])(image_tensor)
-                image_tensor = image_tensor.unsqueeze(0)
-                ref_p = Image.open(opt.reference_path).convert("RGB").resize((224,224))
-                ref_tensor=get_tensor_clip()(ref_p)
-                ref_tensor = ref_tensor.unsqueeze(0)
-                mask=Image.open(opt.mask_path).convert("L")
-                mask = np.array(mask)[None,None]
-                mask = 1 - mask.astype(np.float32)/255.0
-                mask[mask < 0.5] = 0
-                mask[mask >= 0.5] = 1
-                mask_tensor = torch.from_numpy(mask)
-                mask_tensor = Resize([opt.H, opt.W])(mask_tensor)
-                inpaint_image = image_tensor*mask_tensor
-                test_model_kwargs={}
-                test_model_kwargs['inpaint_mask']=mask_tensor.to(device)
-                test_model_kwargs['inpaint_image']=inpaint_image.to(device)
-                ref_tensor=ref_tensor.to(device)
-                uc = None
-                if opt.scale != 1.0:
-                    uc = model.learnable_vector
-                c = model.get_learned_conditioning(ref_tensor.to(torch.float16))
-                c = model.proj_out(c)
-                inpaint_mask=test_model_kwargs['inpaint_mask']
-                z_inpaint = model.encode_first_stage(test_model_kwargs['inpaint_image'])
-                z_inpaint = model.get_first_stage_encoding(z_inpaint).detach()
-                test_model_kwargs['inpaint_image']=z_inpaint
-                test_model_kwargs['inpaint_mask']=Resize([z_inpaint.shape[-2],z_inpaint.shape[-1]])(test_model_kwargs['inpaint_mask'])
+    dataloader = DataLoader(dataset, batch_size=opt.n_samples, shuffle=False, num_workers=0, drop_last=False)
+    
+    ref_file = os.listdir(opt.reference_path)
+    for ref in ref_file:
+        ref_path = os.path.join(opt.reference_path, ref)
+        ref_p = Image.open(ref_path).convert("RGB").resize((224,224))
+        ref_tensor=get_tensor_clip()(ref_p)
+        ref_tensor = ref_tensor.unsqueeze(0)
+        ref_tensor = ref_tensor.to(device)
 
-                shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
-                samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
-                                                    conditioning=c,
-                                                    batch_size=opt.n_samples,
-                                                    shape=shape,
-                                                    verbose=False,
-                                                    unconditional_guidance_scale=opt.scale,
-                                                    unconditional_conditioning=uc,
-                                                    eta=opt.ddim_eta,
-                                                    x_T=start_code,
-                                                    test_model_kwargs=test_model_kwargs)
+        #infer with reference
+        with torch.no_grad():
+            for data in tqdm(dataloader):
+                with precision_scope("cuda"):
+                    with model.ema_scope():
+                        filename=os.path.basename(opt.image_path)
+                        img_p = Image.open(opt.image_path).convert("RGB")
+                        image_tensor = get_tensor()(img_p)
+                        #resize the image_tensor
+                        image_tensor = Resize([opt.H, opt.W])(image_tensor)
+                        image_tensor = image_tensor.unsqueeze(0)
+                        ref_p = Image.open(opt.reference_path).convert("RGB").resize((224,224))
+                        ref_tensor=get_tensor_clip()(ref_p)
+                        ref_tensor = ref_tensor.unsqueeze(0)
+                        mask=Image.open(opt.mask_path).convert("L")
+                        mask = np.array(mask)[None,None]
+                        mask = 1 - mask.astype(np.float32)/255.0
+                        mask[mask < 0.5] = 0
+                        mask[mask >= 0.5] = 1
+                        mask_tensor = torch.from_numpy(mask)
+                        mask_tensor = Resize([opt.H, opt.W])(mask_tensor)
+                        inpaint_image = image_tensor*mask_tensor
+                        test_model_kwargs={}
+                        test_model_kwargs['inpaint_mask']=mask_tensor.to(device)
+                        test_model_kwargs['inpaint_image']=inpaint_image.to(device)
+                        ref_tensor=ref_tensor.to(device)
+                        uc = None
+                        if opt.scale != 1.0:
+                            uc = model.learnable_vector
+                        c = model.get_learned_conditioning(ref_tensor.to(torch.float16))
+                        c = model.proj_out(c)
+                        inpaint_mask=test_model_kwargs['inpaint_mask']
+                        z_inpaint = model.encode_first_stage(test_model_kwargs['inpaint_image'])
+                        z_inpaint = model.get_first_stage_encoding(z_inpaint).detach()
+                        test_model_kwargs['inpaint_image']=z_inpaint
+                        test_model_kwargs['inpaint_mask']=Resize([z_inpaint.shape[-2],z_inpaint.shape[-1]])(test_model_kwargs['inpaint_mask'])
 
-                x_samples_ddim = model.decode_first_stage(samples_ddim)
-                x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
-                x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
+                        shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
+                        samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
+                                                            conditioning=c,
+                                                            batch_size=opt.n_samples,
+                                                            shape=shape,
+                                                            verbose=False,
+                                                            unconditional_guidance_scale=opt.scale,
+                                                            unconditional_conditioning=uc,
+                                                            eta=opt.ddim_eta,
+                                                            x_T=start_code,
+                                                            test_model_kwargs=test_model_kwargs)
 
-                x_checked_image, has_nsfw_concept = check_safety(x_samples_ddim)
-                x_checked_image=x_samples_ddim
-                x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)
+                        x_samples_ddim = model.decode_first_stage(samples_ddim)
+                        x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
+                        x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
 
-                def un_norm(x):
-                    return (x+1.0)/2.0
-                def un_norm_clip(x):
-                    x[0,:,:] = x[0,:,:] * 0.26862954 + 0.48145466
-                    x[1,:,:] = x[1,:,:] * 0.26130258 + 0.4578275
-                    x[2,:,:] = x[2,:,:] * 0.27577711 + 0.40821073
-                    return x
+                        x_checked_image, has_nsfw_concept = check_safety(x_samples_ddim)
+                        x_checked_image=x_samples_ddim
+                        x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)
 
-                if not opt.skip_save:
-                    for i,x_sample in enumerate(x_checked_image_torch):
-                        
+                        def un_norm(x):
+                            return (x+1.0)/2.0
+                        def un_norm_clip(x):
+                            x[0,:,:] = x[0,:,:] * 0.26862954 + 0.48145466
+                            x[1,:,:] = x[1,:,:] * 0.26130258 + 0.4578275
+                            x[2,:,:] = x[2,:,:] * 0.27577711 + 0.40821073
+                            return x
 
-                        all_img=[]
-                        all_img.append(un_norm(image_tensor[i]).cpu())
-                        all_img.append(un_norm(inpaint_image[i]).cpu())
-                        ref_img=ref_tensor
-                        ref_img=Resize([opt.H, opt.W])(ref_img)
-                        all_img.append(un_norm_clip(ref_img[i]).cpu())
-                        all_img.append(x_sample)
-                        grid = torch.stack(all_img, 0)
-                        grid = make_grid(grid)
-                        grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
-                        img = Image.fromarray(grid.astype(np.uint8))
-                        img = put_watermark(img, wm_encoder)
-                        img.save(os.path.join(grid_path, 'grid-'+filename[:-4]+'_'+str(opt.seed)+'.png'))
-                        
+                        if not opt.skip_save:
+                            for i,x_sample in enumerate(x_checked_image_torch):
+                                
+
+                                all_img=[]
+                                all_img.append(un_norm(image_tensor[i]).cpu())
+                                all_img.append(un_norm(inpaint_image[i]).cpu())
+                                ref_img=ref_tensor
+                                ref_img=Resize([opt.H, opt.W])(ref_img)
+                                all_img.append(un_norm_clip(ref_img[i]).cpu())
+                                all_img.append(x_sample)
+                                grid = torch.stack(all_img, 0)
+                                grid = make_grid(grid)
+                                grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
+                                img = Image.fromarray(grid.astype(np.uint8))
+                                img = put_watermark(img, wm_encoder)
+                                img.save(os.path.join(grid_path, 'grid-'+filename[:-4]+'_'+str(opt.seed)+'.png'))
+                                
 
 
-                        x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
-                        img = Image.fromarray(x_sample.astype(np.uint8))
-                        img = put_watermark(img, wm_encoder)
-                        img.save(os.path.join(result_path, filename[:-4]+'_'+str(opt.seed)+".png"))
-                        
-                        mask_save=255.*rearrange(un_norm(inpaint_mask[i]).cpu(), 'c h w -> h w c').numpy()
-                        mask_save= cv2.cvtColor(mask_save,cv2.COLOR_GRAY2RGB)
-                        mask_save = Image.fromarray(mask_save.astype(np.uint8))
-                        mask_save.save(os.path.join(sample_path, filename[:-4]+'_'+str(opt.seed)+"_mask.png"))
-                        GT_img=255.*rearrange(all_img[0], 'c h w -> h w c').numpy()
-                        GT_img = Image.fromarray(GT_img.astype(np.uint8))
-                        GT_img.save(os.path.join(sample_path, filename[:-4]+'_'+str(opt.seed)+"_GT.png"))
-                        inpaint_img=255.*rearrange(all_img[1], 'c h w -> h w c').numpy()
-                        inpaint_img = Image.fromarray(inpaint_img.astype(np.uint8))
-                        inpaint_img.save(os.path.join(sample_path, filename[:-4]+'_'+str(opt.seed)+"_inpaint.png"))
-                        ref_img=255.*rearrange(all_img[2], 'c h w -> h w c').numpy()
-                        ref_img = Image.fromarray(ref_img.astype(np.uint8))
-                        ref_img.save(os.path.join(sample_path, filename[:-4]+'_'+str(opt.seed)+"_ref.png"))
+                                x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
+                                img = Image.fromarray(x_sample.astype(np.uint8))
+                                img = put_watermark(img, wm_encoder)
+                                img.save(os.path.join(result_path, filename[:-4]+'_'+str(opt.seed)+".png"))
+                                
+                                mask_save=255.*rearrange(un_norm(inpaint_mask[i]).cpu(), 'c h w -> h w c').numpy()
+                                mask_save= cv2.cvtColor(mask_save,cv2.COLOR_GRAY2RGB)
+                                mask_save = Image.fromarray(mask_save.astype(np.uint8))
+                                mask_save.save(os.path.join(sample_path, filename[:-4]+'_'+str(opt.seed)+"_mask.png"))
+                                GT_img=255.*rearrange(all_img[0], 'c h w -> h w c').numpy()
+                                GT_img = Image.fromarray(GT_img.astype(np.uint8))
+                                GT_img.save(os.path.join(sample_path, filename[:-4]+'_'+str(opt.seed)+"_GT.png"))
+                                inpaint_img=255.*rearrange(all_img[1], 'c h w -> h w c').numpy()
+                                inpaint_img = Image.fromarray(inpaint_img.astype(np.uint8))
+                                inpaint_img.save(os.path.join(sample_path, filename[:-4]+'_'+str(opt.seed)+"_inpaint.png"))
+                                ref_img=255.*rearrange(all_img[2], 'c h w -> h w c').numpy()
+                                ref_img = Image.fromarray(ref_img.astype(np.uint8))
+                                ref_img.save(os.path.join(sample_path, filename[:-4]+'_'+str(opt.seed)+"_ref.png"))
 
     print(f"Your samples are ready and waiting for you here: \n{outpath} \n"
           f" \nEnjoy.")
