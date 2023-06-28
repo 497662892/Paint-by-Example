@@ -21,7 +21,7 @@ from ldm.models.diffusion.plms import PLMSSampler
 from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 from transformers import AutoFeatureExtractor
 
-from ldm.data.test_bench_dataset import COCOImageDataset
+from ldm.data.polyps_mask import OpenImageDataset
 import clip
 from torchvision.transforms import Resize
 # load safety model
@@ -168,13 +168,13 @@ def main():
     parser.add_argument(
         "--H",
         type=int,
-        default=256,
+        default=384,
         help="image height, in pixel space",
     )
     parser.add_argument(
         "--W",
         type=int,
-        default=256,
+        default=384,
         help="image width, in pixel space",
     )
     parser.add_argument(
@@ -192,7 +192,7 @@ def main():
     parser.add_argument(
         "--n_samples",
         type=int,
-        default=5,
+        default=15,
         help="how many samples to produce for each given prompt. A.k.a. batch size",
     )
     parser.add_argument(
@@ -243,6 +243,20 @@ def main():
         choices=["full", "autocast"],
         default="autocast"
     )
+    parser.add_argument(
+        "--reference",
+        type=str,
+        help="the path of reference images",
+        default="/home/majiajian/dataset/polyp/Kvasir-SEG/train_10/reference"
+    )
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        help="the path of dataset",
+        default="/home/majiajian/dataset/polyp/Kvasir-SEG"
+    )
+    
+    
     opt = parser.parse_args()
 
     if opt.laion400m:
@@ -283,21 +297,24 @@ def main():
 
     sample_path = os.path.join(outpath, "samples")
     result_path = os.path.join(outpath, "results")
+    mask_path = os.path.join(outpath, "masks")
+    
     grid_path=os.path.join(outpath, "grid")
     os.makedirs(sample_path, exist_ok=True)
     os.makedirs(result_path, exist_ok=True)
     os.makedirs(grid_path, exist_ok=True)
+    os.makedirs(mask_path, exist_ok=True)
     base_count = len(os.listdir(sample_path))
     grid_count = len(os.listdir(outpath)) - 1
 
- 
 
-    test_dataset=COCOImageDataset(test_bench_dir='test_bench')
+    dataset_path = opt.dataset_path
+    test_dataset=OpenImageDataset(state="train_10", arbitrary_mask_percent=0, dataset_dir = dataset_path, image_size = opt.H)
     test_dataloader= torch.utils.data.DataLoader(test_dataset, 
                                         batch_size=batch_size, 
                                         num_workers=4, 
                                         pin_memory=True, 
-                                        shuffle=False,#sampler=train_sampler, 
+                                        shuffle=False,
                                         drop_last=True)
 
 
@@ -308,98 +325,115 @@ def main():
     if opt.fixed_code:
         start_code = torch.randn([opt.n_samples, opt.C, opt.H // opt.f, opt.W // opt.f], device=device)
 
+    reference_path = opt.reference
+    ref_imgs = os.listdir(reference_path)
+    
     precision_scope = autocast if opt.precision=="autocast" else nullcontext
     with torch.no_grad():
         with precision_scope("cuda"):
             with model.ema_scope():
-                all_samples = list()
-                for test_batch, test_model_kwargs,segment_id_batch in test_dataloader:
-                    test_model_kwargs={n:test_model_kwargs[n].to(device,non_blocking=True) for n in test_model_kwargs }
-                    uc = None
-                    if opt.scale != 1.0:
-                        uc = model.learnable_vector.repeat(test_batch.shape[0],1,1)
-                    c = model.get_learned_conditioning(test_model_kwargs['ref_imgs'].squeeze(1).to(torch.float16))
-                    if c.shape[-1]==1024:
-                        c = model.proj_out(c)
-                    if len(c.shape)==2:
-                        c = c.unsqueeze(1)
-                    inpaint_image=test_model_kwargs['inpaint_image']
-                    inpaint_mask=test_model_kwargs['inpaint_mask']
-                    z_inpaint = model.encode_first_stage(test_model_kwargs['inpaint_image'])
-                    z_inpaint = model.get_first_stage_encoding(z_inpaint).detach()
-                    test_model_kwargs['inpaint_image']=z_inpaint
-                    test_model_kwargs['inpaint_mask']=Resize([z_inpaint.shape[-1],z_inpaint.shape[-1]])(test_model_kwargs['inpaint_mask'])
+                for ref in tqdm(ref_imgs):
+                    ref_name = ref.split(".")[0]
+                    ref_img = Image.open(os.path.join(reference_path, ref)).convert('RGB').resize((224,224))
+                    ref_tensor=get_tensor_clip()(ref_img)
+                    ref_tensor = ref_tensor.unsqueeze(0).to(device,non_blocking=True)
+                    all_samples = list()
+                    batch = 0
+                    for test_model_kwargs in test_dataloader:
+                        batch += 1
+                        test_model_kwargs={n:test_model_kwargs[n].to(device,non_blocking=True) for n in test_model_kwargs }
+                        uc = None
+                        if opt.scale != 1.0:
+                            uc = model.learnable_vector.repeat(test_model_kwargs["inpaint_image"].shape[0],1,1)
+                        c = model.get_learned_conditioning(ref_tensor)
+                        if c.shape[-1]==1024:
+                            c = model.proj_out(c)
+                        if len(c.shape)==2:
+                            c = c.unsqueeze(1)
+                        c = c.repeat(opt.n_samples, 1, 1)
+                        inpaint_image=test_model_kwargs['inpaint_image']
+                        inpaint_mask=test_model_kwargs['inpaint_mask']
+                        z_inpaint = model.encode_first_stage(test_model_kwargs['inpaint_image'])
+                        z_inpaint = model.get_first_stage_encoding(z_inpaint).detach()
+                        test_model_kwargs['inpaint_image']=z_inpaint
+                        test_model_kwargs['inpaint_mask']=Resize([z_inpaint.shape[-1],z_inpaint.shape[-1]])(test_model_kwargs['inpaint_mask'])
 
-                    shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
-                    samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
-                                                        conditioning=c,
-                                                        batch_size=opt.n_samples,
-                                                        shape=shape,
-                                                        verbose=False,
-                                                        unconditional_guidance_scale=opt.scale,
-                                                        unconditional_conditioning=uc,
-                                                        eta=opt.ddim_eta,
-                                                        x_T=start_code,
-                                                        test_model_kwargs=test_model_kwargs)
+                        shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
+                        samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
+                                                            conditioning=c,
+                                                            batch_size=opt.n_samples,
+                                                            shape=shape,
+                                                            verbose=False,
+                                                            unconditional_guidance_scale=opt.scale,
+                                                            unconditional_conditioning=uc,
+                                                            eta=opt.ddim_eta,
+                                                            x_T=start_code,
+                                                            test_model_kwargs=test_model_kwargs)
 
-                    x_samples_ddim = model.decode_first_stage(samples_ddim)
-                    x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
-                    x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
+                        x_samples_ddim = model.decode_first_stage(samples_ddim)
+                        x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
+                        x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
 
-                    x_checked_image=x_samples_ddim
-                    x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)
+                        x_checked_image=x_samples_ddim
+                        x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)
 
-                    def un_norm(x):
-                        return (x+1.0)/2.0
-                    def un_norm_clip(x):
-                        x[0,:,:] = x[0,:,:] * 0.26862954 + 0.48145466
-                        x[1,:,:] = x[1,:,:] * 0.26130258 + 0.4578275
-                        x[2,:,:] = x[2,:,:] * 0.27577711 + 0.40821073
-                        return x
+                        def un_norm(x):
+                            return (x+1.0)/2.0
+                        def un_norm_clip(x):
+                            x[0,:,:] = x[0,:,:] * 0.26862954 + 0.48145466
+                            x[1,:,:] = x[1,:,:] * 0.26130258 + 0.4578275
+                            x[2,:,:] = x[2,:,:] * 0.27577711 + 0.40821073
+                            return x
+    
+                        if not opt.skip_save:
+                            for i,x_sample in enumerate(x_checked_image_torch):
+                                
 
-                    if not opt.skip_save:
-                        for i,x_sample in enumerate(x_checked_image_torch):
-                            
+                                all_img=[]
+                                all_img.append(un_norm(test_model_kwargs["GT"][i]).cpu())
+                                all_img.append(un_norm(inpaint_image[i]).cpu())
+                                ref_img=ref_tensor[0]
 
-                            all_img=[]
-                            all_img.append(un_norm(test_batch[i]).cpu())
-                            all_img.append(un_norm(inpaint_image[i]).cpu())
-                            ref_img=test_model_kwargs['ref_imgs'].squeeze(1)
-                            ref_img=Resize([512,512])(ref_img)
-                            all_img.append(un_norm_clip(ref_img[i]).cpu())
-                            all_img.append(x_sample)
-                            grid = torch.stack(all_img, 0)
-                            grid = make_grid(grid)
-                            grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
-                            img = Image.fromarray(grid.astype(np.uint8))
-                            img.save(os.path.join(grid_path, 'grid-'+segment_id_batch[i]+'.png'))
-                            
+                                ref_img=Resize([opt.H,opt.W])(ref_img)
+                                all_img.append(un_norm_clip(ref_img).cpu())
+                                all_img.append(x_sample)
 
-
-
-                            x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
-                            img = Image.fromarray(x_sample.astype(np.uint8))
-                            img.save(os.path.join(result_path, segment_id_batch[i]+".png"))
-                            
-                            mask_save=255.*rearrange(un_norm(inpaint_mask[i]).cpu(), 'c h w -> h w c').numpy()
-                            mask_save= cv2.cvtColor(mask_save,cv2.COLOR_GRAY2RGB)
-                            mask_save = Image.fromarray(mask_save.astype(np.uint8))
-                            mask_save.save(os.path.join(sample_path, segment_id_batch[i]+"_mask.png"))
-                            GT_img=255.*rearrange(all_img[0], 'c h w -> h w c').numpy()
-                            GT_img = Image.fromarray(GT_img.astype(np.uint8))
-                            GT_img.save(os.path.join(sample_path, segment_id_batch[i]+"_GT.png"))
-                            inpaint_img=255.*rearrange(all_img[1], 'c h w -> h w c').numpy()
-                            inpaint_img = Image.fromarray(inpaint_img.astype(np.uint8))
-                            inpaint_img.save(os.path.join(sample_path, segment_id_batch[i]+"_inpaint.png"))
-                            ref_img=255.*rearrange(all_img[2], 'c h w -> h w c').numpy()
-                            ref_img = Image.fromarray(ref_img.astype(np.uint8))
-                            ref_img.save(os.path.join(sample_path, segment_id_batch[i]+"_ref.png"))
-                            base_count += 1
+                                grid = torch.stack(all_img, 0)
+                                grid = make_grid(grid)
+                                grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
+                                img = Image.fromarray(grid.astype(np.uint8))
+                                img.save(os.path.join(grid_path, 'grid-'+ str(i) + "-" + str(batch) + "-" + ref_name + '.png'))
+                                
 
 
 
-                    if not opt.skip_grid:
-                        all_samples.append(x_checked_image_torch)
+                                x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
+                                img = Image.fromarray(x_sample.astype(np.uint8))
+                                img.save(os.path.join(result_path, str(i) + "-" + str(batch) + "-" + ref_name + ".png"))
+                                
+                                inpaint_mask[i] = 1 - inpaint_mask[i]
+                                mask_save=255.*rearrange(un_norm(inpaint_mask[i]).cpu(), 'c h w -> h w c').numpy()
+                                mask_save= cv2.cvtColor(mask_save,cv2.COLOR_GRAY2RGB)
+                                mask_save = Image.fromarray(mask_save.astype(np.uint8))
+                                mask_save.save(os.path.join(mask_path, str(i)  + "-" + str(batch) + "-" + ref_name +".png"))
+                                
+                                GT_img=255.*rearrange(all_img[0], 'c h w -> h w c').numpy()
+                                GT_img = Image.fromarray(GT_img.astype(np.uint8))
+                                GT_img.save(os.path.join(sample_path, str(i) + "-" + str(batch) + "-" + ref_name +"_GT.png"))
+                                
+                                inpaint_img=255.*rearrange(all_img[1], 'c h w -> h w c').numpy()
+                                inpaint_img = Image.fromarray(inpaint_img.astype(np.uint8))
+                                inpaint_img.save(os.path.join(sample_path, str(i) + "-" + str(batch) + "-" + ref_name +"_inpaint.png"))
+                                
+                                ref_img=255.*rearrange(all_img[2], 'c h w -> h w c').numpy()
+                                ref_img = Image.fromarray(ref_img.astype(np.uint8))
+                                ref_img.save(os.path.join(sample_path, str(i) + "-" + str(batch) + "-" + ref_name +"_ref.png"))
+                                base_count += 1
+
+
+
+                        if not opt.skip_grid:
+                            all_samples.append(x_checked_image_torch)
 
 
     print(f"Your samples are ready and waiting for you here: \n{outpath} \n"

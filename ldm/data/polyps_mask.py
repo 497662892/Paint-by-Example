@@ -93,7 +93,7 @@ class OpenImageDataset(data.Dataset):
             for file_name in per_dir_file_list:
                 self.bbox_path_list.append(os.path.join(bbox_dir,file_name))
         else:
-            bbox_dir = os.path.join(args['dataset_dir'], 'test', 'bboxs')
+            bbox_dir = os.path.join(args['dataset_dir'], 'train_10', 'bboxs')
             per_dir_file_list=os.listdir(bbox_dir)
             for file_name in per_dir_file_list:
                 self.bbox_path_list.append(os.path.join(bbox_dir,file_name))

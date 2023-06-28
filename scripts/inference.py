@@ -177,13 +177,13 @@ def main():
     parser.add_argument(
         "--H",
         type=int,
-        default=256,
+        default=512,
         help="image height, in pixel space",
     )
     parser.add_argument(
         "--W",
         type=int,
-        default=256,
+        default=512,
         help="image width, in pixel space",
     )
     parser.add_argument(
@@ -354,7 +354,7 @@ def main():
                 x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
                 x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
 
-                x_checked_image, has_nsfw_concept = check_safety(x_samples_ddim)
+                # x_checked_image, has_nsfw_concept = check_safety(x_samples_ddim)
                 x_checked_image=x_samples_ddim
                 x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)
 

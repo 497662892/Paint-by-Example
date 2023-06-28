@@ -1,10 +1,10 @@
 python scripts/inference.py \
 --outdir infers/Kvasir-SEG \
 --config configs/polyp.yaml \
---ckpt /home/majiajian/code/diffusion/Paint-by-Example/logs/Paint-by-Example/2023-06-20T16-56-07_polyp/checkpoints/last.ckpt \
---image_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/images/cju1hhj6mxfp90835n3wofrap.jpg \
---mask_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/masks/cju1hhj6mxfp90835n3wofrap.jpg \
---reference_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/reference/cju2qqn5ys4uo0988ewrt2ip2_ref_0.jpg \
+--ckpt /home/majiajian/code/diffusion/Paint-by-Example/logs/Paint-by-Example/2023-06-28T09-56-41_polyp/checkpoints/last.ckpt \
+--image_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/images/cju1f79yhsb5w0993txub59ol.jpg \
+--mask_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/masks/cju1f79yhsb5w0993txub59ol.jpg \
+--reference_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/reference/cju1dhfok4mhe0878jlgrag0h_ref_0.jpg \
 --seed 321 \
 --scale 5 \
 --ddim_steps 200 \
@@ -13,11 +13,11 @@ python scripts/inference.py \
 python scripts/inference.py \
 --outdir infers/Kvasir-SEG \
 --config configs/polyp.yaml \
---ckpt /home/majiajian/code/diffusion/Paint-by-Example/logs/Paint-by-Example/2023-06-20T16-56-07_polyp/checkpoints/last.ckpt \
---image_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/images/cju1hhj6mxfp90835n3wofrap.jpg \
---mask_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/masks/cju1hhj6mxfp90835n3wofrap.jpg \
---reference_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/reference/cju1dfeupuzlw0835gnxip369_ref_0.jpg \
---seed 5876 \
+--ckpt /home/majiajian/code/diffusion/Paint-by-Example/logs/Paint-by-Example/2023-06-28T09-56-41_polyp/checkpoints/last.ckpt \
+--image_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/images/cju1f79yhsb5w0993txub59ol.jpg \
+--mask_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/masks/cju1f79yhsb5w0993txub59ol.jpg \
+--reference_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/reference/cju2trbpkv0c00988hxla5dzz_ref_0.jpg\
+--seed 586 \
 --scale 5 \
 --ddim_steps 200 \
 --ddim_eta 1
@@ -25,10 +25,10 @@ python scripts/inference.py \
 python scripts/inference.py \
 --outdir infers/Kvasir-SEG \
 --config configs/polyp.yaml \
---ckpt /home/majiajian/code/diffusion/Paint-by-Example/logs/Paint-by-Example/2023-06-20T16-56-07_polyp/checkpoints/last.ckpt \
---image_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/images/cju1hhj6mxfp90835n3wofrap.jpg \
---mask_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/masks/cju1hhj6mxfp90835n3wofrap.jpg \
---reference_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/reference/cju2zp89k9q1g0855k1x0f1xa_ref_0.jpg \
+--ckpt /home/majiajian/code/diffusion/Paint-by-Example/logs/Paint-by-Example/2023-06-28T09-56-41_polyp/checkpoints/last.ckpt \
+--image_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/images/cju1f79yhsb5w0993txub59ol.jpg \
+--mask_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/masks/cju1f79yhsb5w0993txub59ol.jpg \
+--reference_path /home/majiajian/dataset/polyp/Kvasir-SEG/val/reference/cju1b75x63ddl0799sdp0i2j3_ref_0.jpg \
 --seed 5065 \
 --scale 5 \
 --ddim_steps 200 \
