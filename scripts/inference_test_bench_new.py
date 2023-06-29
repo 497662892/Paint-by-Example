@@ -26,8 +26,8 @@ import clip
 from torchvision.transforms import Resize
 # load safety model
 safety_model_id = "CompVis/stable-diffusion-safety-checker"
-safety_feature_extractor = AutoFeatureExtractor.from_pretrained(safety_model_id)
-safety_checker = StableDiffusionSafetyChecker.from_pretrained(safety_model_id)
+# safety_feature_extractor = AutoFeatureExtractor.from_pretrained(safety_model_id)
+# safety_checker = StableDiffusionSafetyChecker.from_pretrained(safety_model_id)
 
 
 def chunk(it, size):
@@ -168,13 +168,13 @@ def main():
     parser.add_argument(
         "--H",
         type=int,
-        default=384,
+        default=512,
         help="image height, in pixel space",
     )
     parser.add_argument(
         "--W",
         type=int,
-        default=384,
+        default=512,
         help="image width, in pixel space",
     )
     parser.add_argument(
@@ -192,7 +192,7 @@ def main():
     parser.add_argument(
         "--n_samples",
         type=int,
-        default=15,
+        default=10,
         help="how many samples to produce for each given prompt. A.k.a. batch size",
     )
     parser.add_argument(
@@ -412,9 +412,9 @@ def main():
                                 img.save(os.path.join(result_path, str(i) + "-" + str(batch) + "-" + ref_name + ".png"))
                                 
                                 inpaint_mask[i] = 1 - inpaint_mask[i]
-                                mask_save=255.*rearrange(un_norm(inpaint_mask[i]).cpu(), 'c h w -> h w c').numpy()
-                                mask_save= cv2.cvtColor(mask_save,cv2.COLOR_GRAY2RGB)
-                                mask_save = Image.fromarray(mask_save.astype(np.uint8))
+                                mask_save=255.* inpaint_mask[i].squeeze(0).cpu().numpy()
+                                mask_save = mask_save.astype(np.uint8)
+                                mask_save = Image.fromarray(mask_save, mode='L')
                                 mask_save.save(os.path.join(mask_path, str(i)  + "-" + str(batch) + "-" + ref_name +".png"))
                                 
                                 GT_img=255.*rearrange(all_img[0], 'c h w -> h w c').numpy()
