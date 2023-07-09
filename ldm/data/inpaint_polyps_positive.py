@@ -69,7 +69,7 @@ class OpenImageDataset(data.Dataset):
         self.kernel = np.ones((1, 1), np.uint8)
         self.random_trans=A.Compose([
             A.HorizontalFlip(p=0.5),
-            A.Rotate(limit=20),
+            A.VerticalFlip(p=0.5),
             A.Blur(p=0.3),
             A.ElasticTransform(p=0.3),
             A.LongestMaxSize(max_size=224),
@@ -105,8 +105,8 @@ class OpenImageDataset(data.Dataset):
         img_path=os.path.join(self.args['dataset_dir'], self.state,file_name)
 
         img_p = Image.open(img_path).convert("RGB")
-        bbox_weight = np.random.uniform(0.125, 0.5)*img_p.size[0]
-        bbox_height = np.random.uniform(0.125, 0.5)*img_p.size[1]
+        bbox_weight = np.random.uniform(0.3, 0.6)*img_p.size[0]
+        bbox_height = np.random.uniform(0.3, 0.6)*img_p.size[1]
         bbox_left = np.random.uniform(0, 1-bbox_weight/img_p.size[0])*img_p.size[0]
         bbox_low = np.random.uniform(0, 1-bbox_height/img_p.size[1])*img_p.size[1]
         bbox_right = bbox_left + bbox_weight
@@ -246,7 +246,7 @@ class OpenImageDataset(data.Dataset):
             
             
         inpaint_tensor_resize=image_tensor_resize*mask_tensor_resize
-
+ 
         return {"GT":image_tensor_resize,"inpaint_image":inpaint_tensor_resize,"inpaint_mask":mask_tensor_resize,"ref_imgs":ref_image_tensor,"real_mask":1 - mask_tensor_resize}
 
 
