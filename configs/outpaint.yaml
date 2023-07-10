@@ -9,7 +9,7 @@ model:
     timesteps: 1000
     first_stage_key: "inpaint"
     cond_stage_key: "image"
-    image_size: 64
+    image_size: 32
     channels: 4
     cond_stage_trainable: true   # Note: different from the one we trained before
     conditioning_key: crossattn
@@ -30,7 +30,7 @@ model:
     unet_config:
       target: ldm.modules.diffusionmodules.openaimodel.UNetModel
       params:
-        image_size: 32 # unused
+        image_size: 48 # unused
         in_channels: 9
         out_channels: 4
         model_channels: 320
@@ -77,30 +77,21 @@ data:
       batch_size: 4
       wrap: False
       train:
-          target: ldm.data.open-images.OpenImageDataset
+          target: ldm.data.outpaint.OpenImageDataset
           params:
               state: train
-              dataset_dir: dataset/open-images
-              arbitrary_mask_percent: 0.5
-              image_size: 512
-      validation:
-          target: ldm.data.open-images.OpenImageDataset
-          params:
-              state: validation
-              dataset_dir: dataset/open-images 
-              arbitrary_mask_percent: 0.5
-              image_size: 512
-      test:
-          target: ldm.data.open-images.OpenImageDataset
-          params:
-              state: test
-              dataset_dir: dataset/open-images
-              arbitrary_mask_percent: 0.5
-              image_size: 512
+              dataset_dir: /home/user01/data/polyp/new_kvasir
+              image_size: 256
+      # validation:
+      #     target: ldm.data.outpaint.OpenImageDataset
+      #     params:
+      #         state: val
+      #         dataset_dir: /home/user01/data/polyp/new_kvasir
+      #         image_size: 256
 
 lightning:
   trainer:
-    max_epochs: 40
+    max_epochs: 100
     num_nodes: 1
     accelerator: 'gpu'
-    gpus: "0,1,2,3,4,5,6,7"
+    gpus: "7"

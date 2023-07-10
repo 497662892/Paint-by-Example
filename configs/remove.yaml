@@ -77,21 +77,23 @@ data:
       batch_size: 4
       wrap: False
       train:
-          target: ldm.data.polyps_mask.OpenImageDataset
+          target: ldm.data.remove.OpenImageDataset
           params:
               state: train
-              dataset_dir: /home/majiajian/dataset/polyp/Kvasir-SEG
+              dataset_dir: /home/user01/data/polyp/combine
+              arbitrary_mask_percent: 0.5
               image_size: 256
       validation:
-          target: ldm.data.polyps_mask.OpenImageDataset
+          target: ldm.data.remove.OpenImageDataset
           params:
               state: val
-              dataset_dir: /home/majiajian/dataset/polyp/Kvasir-SEG
+              dataset_dir: /home/user01/data/polyp/combine
+              arbitrary_mask_percent: 0.5
               image_size: 256
 
 lightning:
   trainer:
-    max_epochs: 100
+    max_epochs: 20
     num_nodes: 1
     accelerator: 'gpu'
-    gpus: "0"
+    gpus: "7"

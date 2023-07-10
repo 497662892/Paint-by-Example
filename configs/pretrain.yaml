@@ -77,14 +77,14 @@ data:
       batch_size: 4
       wrap: False
       train:
-          target: ldm.data.inpaint_polyps_positive.OpenImageDataset
+          target: ldm.data.replace_pretrain.OpenImageDataset
           params:
               state: train
               dataset_dir: /home/user01/data/polyp/pretrain
               arbitrary_mask_percent: 0.5
               image_size: 256
       validation:
-          target: ldm.data.inpaint_polyps_positive.OpenImageDataset
+          target: ldm.data.replace_pretrain.OpenImageDataset
           params:
               state: val
               dataset_dir: /home/user01/data/polyp/pretrain

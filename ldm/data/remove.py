@@ -28,6 +28,7 @@ import math
 from functools import partial
 import albumentations as A
 import bezier
+import pickle
 
 
 def bbox_process(bbox):
@@ -67,81 +68,64 @@ class OpenImageDataset(data.Dataset):
         self.arbitrary_mask_percent=arbitrary_mask_percent
         self.kernel = np.ones((1, 1), np.uint8)
         self.random_trans=A.Compose([
-            A.Resize(height=224,width=224),
             A.HorizontalFlip(p=0.5),
-            A.Rotate(limit=20),
+            A.VerticalFlip(p=0.5),
             A.Blur(p=0.3),
-            A.ElasticTransform(p=0.3)
+            A.ElasticTransform(p=0.3),
+            A.LongestMaxSize(max_size=224),
+            A.PadIfNeeded(min_height=224, min_width=224, border_mode=cv2.BORDER_CONSTANT),
             ])
-        bad_list=[
-            '1af17f3d912e9aac.txt',
-            '1d5ef05c8da80e31.txt',
-            '3095084b358d3f2d.txt',
-            '3ad7415a11ac1f5e.txt',
-            '42a30d8f8fba8b40.txt',
-            '1366cde3b480a15c.txt',
-            '03a53ed6ab408b9f.txt'
-        ]
-        self.bbox_path_list=[]
-        if state == "train":
-            dir_name_list=['0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f']
-            for dir_name in dir_name_list:
-                bbox_dir=os.path.join(args['dataset_dir'],'bbox','train_'+dir_name)
-                per_dir_file_list=os.listdir(bbox_dir)
-                for file_name in per_dir_file_list:
-                    if file_name not in bad_list:
-                        self.bbox_path_list.append(os.path.join(bbox_dir,file_name))
-        elif state == "validation":
-            bbox_dir=os.path.join(args['dataset_dir'],'bbox','validation')
-            per_dir_file_list=os.listdir(bbox_dir)
-            for file_name in per_dir_file_list:
-                if file_name not in bad_list:
-                    self.bbox_path_list.append(os.path.join(bbox_dir,file_name))
-        else:
-            bbox_dir=os.path.join(args['dataset_dir'],'bbox','test')
-            per_dir_file_list=os.listdir(bbox_dir)
-            for file_name in per_dir_file_list:
-                if file_name not in bad_list:
-                    self.bbox_path_list.append(os.path.join(bbox_dir,file_name))
-        self.bbox_path_list.sort()
-        self.length=len(self.bbox_path_list)
- 
+        self.augmentation = T.Compose([
+            T.RandomHorizontalFlip(p=0.5),
+            T.RandomVerticalFlip(p=0.5),
+        ])
+        self.resize = T.Resize([self.args['image_size'],self.args['image_size']])
 
-       
+        self.images_path_list=[]
+        if state == "train":
+            images_dir = os.path.join(args['dataset_dir'], 'train')
+            per_dir_file_list=os.listdir(images_dir)
+            for file_name in per_dir_file_list:
+                self.images_path_list.append(os.path.join(images_dir,file_name))
+        elif state == "val":
+            images_dir = os.path.join(args['dataset_dir'], 'val')
+            per_dir_file_list=os.listdir(images_dir)
+            for file_name in per_dir_file_list:
+                self.images_path_list.append(os.path.join(images_dir,file_name))
+
+        self.images_path_list.sort()
+        self.length=len(self.images_path_list)
+
+
+
 
     
     def __getitem__(self, index):
-        bbox_path=self.bbox_path_list[index]
-        file_name=os.path.splitext(os.path.basename(bbox_path))[0]+'.jpg'
-        dir_name=bbox_path.split('/')[-2]
-        img_path=os.path.join('dataset/open-images/images',dir_name,file_name)
+        file_name=self.images_path_list[index]
+        img_path=os.path.join(self.args['dataset_dir'], self.state,file_name)
 
-
-        bbox_list=[]
-        with open(bbox_path) as f:
-            line=f.readline()
-            while line:
-                line_split=line.strip('\n').split(" ")
-                bbox_temp=[]
-                for i in range(4):
-                    bbox_temp.append(int(float(line_split[i])))
-                bbox_list.append(bbox_temp)
-                line=f.readline()
-        bbox=random.choice(bbox_list)
         img_p = Image.open(img_path).convert("RGB")
+        bbox_weight = np.random.uniform(0.3, 0.7)*img_p.size[0]
+        bbox_height = np.random.uniform(0.3, 0.7)*img_p.size[1]
+        bbox_left = np.random.uniform(0, 1-bbox_weight/img_p.size[0])*img_p.size[0]
+        bbox_low = np.random.uniform(0, 1-bbox_height/img_p.size[1])*img_p.size[1]
+        bbox_right = bbox_left + bbox_weight
+        bbox_height = bbox_low + bbox_height
+        
+        bbox = [int(bbox_left), int(bbox_low), int(bbox_right), int(bbox_height)]
 
    
         ### Get reference image
         bbox_pad=copy.copy(bbox)
-        bbox_pad[0]=bbox[0]-min(10,bbox[0]-0)
-        bbox_pad[1]=bbox[1]-min(10,bbox[1]-0)
-        bbox_pad[2]=bbox[2]+min(10,img_p.size[0]-bbox[2])
-        bbox_pad[3]=bbox[3]+min(10,img_p.size[1]-bbox[3])
+
         img_p_np=cv2.imread(img_path)
         img_p_np = cv2.cvtColor(img_p_np, cv2.COLOR_BGR2RGB)
-        ref_image_tensor=img_p_np[bbox_pad[1]:bbox_pad[3],bbox_pad[0]:bbox_pad[2],:]
+        # ref_image_tensor=img_p_np[bbox_pad[1]:bbox_pad[3],bbox_pad[0]:bbox_pad[2],:]
+        ref_image_tensor = img_p_np
+
         ref_image_tensor=self.random_trans(image=ref_image_tensor)
         ref_image_tensor=Image.fromarray(ref_image_tensor["image"])
+        
         ref_image_tensor=get_tensor_clip()(ref_image_tensor)
 
 
@@ -245,11 +229,25 @@ class OpenImageDataset(data.Dataset):
             image_tensor_cropped=image_tensor
             mask_tensor_cropped=mask_tensor
 
-        image_tensor_resize=T.Resize([self.args['image_size'],self.args['image_size']])(image_tensor_cropped)
-        mask_tensor_resize=T.Resize([self.args['image_size'],self.args['image_size']])(mask_tensor_cropped)
+        
+        image_tensor_resize=self.resize(image_tensor_cropped)
+        mask_tensor_resize=self.resize(mask_tensor_cropped)
+        
+        if self.state == "train":
+            seed = np.random.randint(2147483647) # make a seed with numpy generator 
+            
+            random.seed(seed) # apply this seed to img tranfsorms
+            torch.manual_seed(seed) # needed for torchvision 0.7
+            image_tensor_resize=self.augmentation(image_tensor_resize)
+            
+            random.seed(seed) # apply this seed to img tranfsorms
+            torch.manual_seed(seed) # needed for torchvision 0.7
+            mask_tensor_resize=self.augmentation(mask_tensor_resize)
+            
+            
         inpaint_tensor_resize=image_tensor_resize*mask_tensor_resize
 
-        return {"GT":image_tensor_resize,"inpaint_image":inpaint_tensor_resize,"inpaint_mask":mask_tensor_resize,"ref_imgs":ref_image_tensor}
+        return {"GT":image_tensor_resize,"inpaint_image":inpaint_tensor_resize,"inpaint_mask":mask_tensor_resize,"ref_imgs":ref_image_tensor,"real_mask":1 - mask_tensor_resize}
 
 
 

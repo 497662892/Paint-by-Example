@@ -69,7 +69,7 @@ class OpenImageDataset(data.Dataset):
         self.kernel = np.ones((1, 1), np.uint8)
         self.random_trans=A.Compose([
             A.HorizontalFlip(p=0.5),
-            A.Rotate(limit=20),
+            A.VerticalFlip(p=0.5),
             A.Blur(p=0.3),
             A.ElasticTransform(p=0.3),
             A.LongestMaxSize(max_size=224),
@@ -125,8 +125,16 @@ class OpenImageDataset(data.Dataset):
         
         img_p_np=cv2.imread(img_path)
         img_p_np = cv2.cvtColor(img_p_np, cv2.COLOR_BGR2RGB)
-        ref_image_tensor=img_p_np
+        ref_image_tensor=img_p_np[bbox_pad[1]:bbox_pad[3],bbox_pad[0]:bbox_pad[2],:]
         
+        # H1 = bbox_pad[3]-bbox_pad[1]
+        # W1 = bbox_pad[2]-bbox_pad[0]
+        # #padding the ref_image_tensor into square with 0
+        # if H1>W1:
+        #     ref_image_tensor=np.pad(ref_image_tensor,((0,0),(int((H1-W1)/2),int((H1-W1)/2)),(0,0)),'constant',constant_values=0)
+        # elif H1<W1:
+        #     ref_image_tensor=np.pad(ref_image_tensor,((int((W1-H1)/2),int((W1-H1)/2)),(0,0),(0,0)),'constant',constant_values=0)
+
 
         ref_image_tensor=self.random_trans(image=ref_image_tensor)
         ref_image_tensor=Image.fromarray(ref_image_tensor["image"])
@@ -184,7 +192,7 @@ class OpenImageDataset(data.Dataset):
             else:
                 upper_pos=random.randint(upper_most,lower_most) 
                 free_space=min(extended_bbox[1]-upper_pos,extended_bbox[0]-0,W-extended_bbox[2],upper_pos+W-extended_bbox[3])
-                random_free_space=random.randint(0,int(0.6*free_space))  
+                random_free_space=random.randint(0,int(0.6*free_space))
                 image_tensor_cropped=image_tensor[:,upper_pos+random_free_space:upper_pos+W-random_free_space,random_free_space:W-random_free_space]
                 real_mask_cropped = real_mask_tensor[:,upper_pos+random_free_space:upper_pos+W-random_free_space,random_free_space:W-random_free_space]
         else:
@@ -206,7 +214,7 @@ class OpenImageDataset(data.Dataset):
             real_mask_tensor_resize = self.augmentation(real_mask_tensor_resize)
         
         
-        temp = real_mask_tensor_resize
+        temp = 1 - real_mask_tensor_resize
         inpaint_tensor_resize=image_tensor_resize*temp
 
         return {"GT":image_tensor_resize,"inpaint_image":inpaint_tensor_resize,"inpaint_mask":temp,"ref_imgs":ref_image_tensor,"real_mask":real_mask_tensor_resize}
