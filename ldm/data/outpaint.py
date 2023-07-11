@@ -205,8 +205,8 @@ class OpenImageDataset(data.Dataset):
             torch.manual_seed(seed) # needed for torchvision 0.7
             real_mask_tensor_resize = self.augmentation(real_mask_tensor_resize)
         
-        
-        temp = real_mask_tensor_resize
+
+        temp = F.max_pool2d(real_mask_tensor_resize, kernel_size=11, stride=1, padding=5)
         inpaint_tensor_resize=image_tensor_resize*temp
 
         return {"GT":image_tensor_resize,"inpaint_image":inpaint_tensor_resize,"inpaint_mask":temp,"ref_imgs":ref_image_tensor,"real_mask":real_mask_tensor_resize}
