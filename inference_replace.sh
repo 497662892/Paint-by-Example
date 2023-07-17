@@ -1,10 +1,16 @@
-python scripts/inference_test_bench_new.py \
+#!/bin/bash
+export CUDA_VISIBLE_DEVICES=1
+
+python scripts/infer/infer_replace.py \
 --ddim_steps 100 \
 --ddim_eta 1 \
---outdir results/infer/Kvasir-SEG_10_high \
---config configs/polyp.yaml \
---ckpt /home/majiajian/code/diffusion/Paint-by-Example/logs/Paint-by-Example/2023-06-28T09-56-41_polyp/checkpoints/last.ckpt \
+--outdir results/infer/replace_new_512 \
+--config configs/replace.yaml \
+--ckpt logs/replace/2023-07-17T08-38-48_replace/checkpoints/last.ckpt \
 --seed 42 \
---reference /home/majiajian/dataset/polyp/Kvasir-SEG/train_10/reference \
---dataset_path /home/majiajian/dataset/polyp/Kvasir-SEG \
+--reference /home/user01/data/polyp/new_kvasir/train_10/reference \
+--dataset_path /home/user01/data/polyp/new_kvasir \
+--H 512 \
+--W 512 \
+--n_samples 4 \
 --scale 5

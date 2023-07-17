@@ -66,65 +66,31 @@ class OpenImageDataset(data.Dataset):
         self.state=state
         self.args=args
         self.kernel = np.ones((1, 1), np.uint8)
-
+        
         self.resize = T.Resize([self.args['image_size'],self.args['image_size']])
         self.resize_ref = T.Resize([224,224])
-
-        self.bbox_path_list=[]
-
-        bbox_dir = os.path.join(args['dataset_dir'], 'train_10', 'bboxs')
-        per_dir_file_list=os.listdir(bbox_dir)
-        for file_name in per_dir_file_list:
-            self.bbox_path_list.append(os.path.join(bbox_dir,file_name))
-            
-        self.bbox_path_list.sort()
-        self.length=len(self.bbox_path_list)
+        
+        self.img_paths = self.args['dataset_dir']
+        self.img_list = os.listdir(self.img_paths)
+        
+        self.length = len(self.img_list)
+        self.img_list.sort()
  
 
        
 
     
     def __getitem__(self, index):
-        bbox_path=self.bbox_path_list[index]
-        file_name=os.path.splitext(os.path.basename(bbox_path))[0]+'.jpg'
-        img_path=os.path.join(self.args['dataset_dir'], self.state,'images',file_name)
-        real_mask_path=os.path.join(self.args['dataset_dir'], self.state,'masks',file_name)
-
-        bbox_list=pickle.load(open(bbox_path,'rb'))
-        bbox=random.choice(bbox_list)
+        img_path= self.img_paths+"/"+self.img_list[index]
         img_p = Image.open(img_path).convert("RGB")
-        # real_mask = Image.open(real_mask_path).convert("L")
-        
+
         ### Generate mask
         image_tensor = get_tensor()(img_p)
-        # real_mask_tensor = T.ToTensor()(real_mask)
-        W,H = img_p.size
-
-        extended_bbox=copy.copy(bbox)
-        left_freespace=bbox[0]-0
-        right_freespace=W-bbox[2]
-        up_freespace=bbox[1]-0
-        down_freespace=H-bbox[3]
         
-        extended_bbox[0]=bbox[0]-int(0.2*left_freespace)
-        extended_bbox[1]=bbox[1]-int(0.2*up_freespace)
-        extended_bbox[2]=bbox[2]+int(0.2*right_freespace)
-        extended_bbox[3]=bbox[3]+int(0.2*down_freespace)
+        ref_tensor = self.resize_ref(get_tensor_clip()(img_p))
 
-        mask_img=np.zeros((H,W))
-        mask_img[extended_bbox[1]:extended_bbox[3],extended_bbox[0]:extended_bbox[2]]=1
-        mask_img=Image.fromarray(mask_img)
-        mask_tensor=get_tensor(normalize=False, toTensor=True)(mask_img)
-        ref_p = Image.open("/home/user01/data/polyp/combine/train/case_M_20181207142726_0U62365120779625_1_002_001-1_Negative_ayy_image000659.jpg").convert("RGB")
-        ref_tensor = self.resize_ref(get_tensor_clip()(ref_p))
-       
-        image_tensor_cropped=image_tensor
-        real_mask_cropped = mask_tensor
-
-        
-        image_tensor_resize=self.resize(image_tensor_cropped)
-        real_mask_tensor_resize=self.resize(real_mask_cropped)
-        
+        image_tensor_resize=self.resize(image_tensor)
+        real_mask_tensor_resize = torch.zeros_like(image_tensor_resize)[0:1,:,:]
         
         temp = 1 - real_mask_tensor_resize
         inpaint_tensor_resize=image_tensor_resize*temp
@@ -135,7 +101,6 @@ class OpenImageDataset(data.Dataset):
 
     def __len__(self):
         return self.length
-
 
 
 

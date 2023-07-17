@@ -61,14 +61,19 @@ def get_tensor_clip(normalize=True, toTensor=True):
 
 
 class OpenImageDataset(data.Dataset):
-    def __init__(self,state,**args
+    def __init__(self,state,random=False,**args
         ):
         self.state=state
         self.args=args
         self.kernel = np.ones((1, 1), np.uint8)
         
         self.resize = T.Resize([self.args['image_size'],self.args['image_size']])
-
+        self.augmentation = A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.2, rotate_limit=30, p=0.5),
+            A.ElasticTransform(p=0.5)
+            ])
         self.bbox_path_list=[]
 
         bbox_dir = os.path.join(args['dataset_dir'], 'train_10', 'bboxs')
@@ -77,7 +82,7 @@ class OpenImageDataset(data.Dataset):
             self.bbox_path_list.append(os.path.join(bbox_dir,file_name))
         self.bbox_path_list.sort()
         self.length=len(self.bbox_path_list)
- 
+        self.random=random
 
        
 
@@ -88,18 +93,34 @@ class OpenImageDataset(data.Dataset):
         img_path=os.path.join(self.args['dataset_dir'], self.state,'images',file_name)
         real_mask_path=os.path.join(self.args['dataset_dir'], self.state,'masks',file_name)
 
-        img_p = Image.open(img_path).convert("RGB")
-        real_mask = Image.open(real_mask_path).convert("L")
+        img_p = cv2.imread(img_path)
+        img_p = cv2.cvtColor(img_p, cv2.COLOR_BGR2RGB)
+        real_mask = cv2.imread(real_mask_path,0)
 
-
+        
+        if self.random:
+            seed = np.random.randint(2147483647)
+            torch.manual_seed(seed)
+            transformed  = self.augmentation(image = img_p, mask = real_mask)
+            
+        img_p = transformed['image']
+        real_mask = transformed['mask']
+        
+        img_p = Image.fromarray(img_p)
+        real_mask = Image.fromarray(real_mask)
+                
         ### Generate mask
         image_tensor = get_tensor()(img_p)
         real_mask_tensor = T.ToTensor()(real_mask)
 
         image_tensor_resize=self.resize(image_tensor)
         real_mask_tensor_resize=self.resize(real_mask_tensor)
+        
+        
 
-        temp = F.max_pool2d(real_mask_tensor_resize, kernel_size=11, stride=1, padding=5)
+
+
+        temp = F.max_pool2d(real_mask_tensor_resize, kernel_size=5, stride=1, padding=2)
         inpaint_tensor_resize=image_tensor_resize*temp
 
         return {"GT":image_tensor_resize,"inpaint_image":inpaint_tensor_resize,"inpaint_mask":temp,"real_mask":real_mask_tensor_resize}

@@ -582,6 +582,7 @@ class UNetModel(nn.Module):
         n_embed=None,                     # custom support for prediction of discrete ids into codebook of first stage vq model
         legacy=True,
         add_conv_in_front_of_unet=False,
+        return_embeddings=False,
     ):
         super().__init__()
         if use_spatial_transformer:
@@ -619,6 +620,7 @@ class UNetModel(nn.Module):
         self.num_heads_upsample = num_heads_upsample
         self.predict_codebook_ids = n_embed is not None
         self.add_conv_in_front_of_unet=add_conv_in_front_of_unet
+        self.return_embeddings = return_embeddings
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
@@ -885,6 +887,8 @@ class UNetModel(nn.Module):
         h = h.type(x.dtype)
         if self.predict_codebook_ids:
             return self.id_predictor(h)
+        if self.return_embeddings:
+            return h
         else:
             return self.out(h)
 

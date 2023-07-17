@@ -61,23 +61,31 @@ def get_tensor_clip(normalize=True, toTensor=True):
 
 
 class OpenImageDataset(data.Dataset):
-    def __init__(self,state,arbitrary_mask_percent=0,**args
+    def __init__(self,state,arbitrary_mask_percent=0, use_mask = 0.5,**args
         ):
         self.state=state
         self.args=args
         self.arbitrary_mask_percent=arbitrary_mask_percent
         self.kernel = np.ones((1, 1), np.uint8)
+        self.mask_path = os.path.join(args['dataset_dir'], "train_10", 'masks')
         self.random_trans=A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.Blur(p=0.3),
-            A.ElasticTransform(p=0.3),
+            A.ElasticTransform(p=0.5),
             A.LongestMaxSize(max_size=224),
             A.PadIfNeeded(min_height=224, min_width=224, border_mode=cv2.BORDER_CONSTANT),
             ])
         self.augmentation = T.Compose([
             T.RandomHorizontalFlip(p=0.5),
             T.RandomVerticalFlip(p=0.5),
+            T.RandomAffine(degrees=30, translate=(0.1, 0.1), scale=(0.8, 1.2), shear=10, resample=False, fillcolor=0),
+        ])
+        self.augmentation2 = A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            A.ShiftScaleRotate(shift_limit=0.1, scale_limit=(-0.2,0.2), rotate_limit=45, p=0.5, border_mode=cv2.BORDER_CONSTANT),
+            A.ElasticTransform(p=0.5,border_mode=cv2.BORDER_CONSTANT),
         ])
         self.resize = T.Resize([self.args['image_size'],self.args['image_size']])
 
@@ -93,6 +101,7 @@ class OpenImageDataset(data.Dataset):
             for file_name in per_dir_file_list:
                 self.images_path_list.append(os.path.join(images_dir,file_name))
 
+        self.use_mask = use_mask
         self.images_path_list.sort()
         self.length=len(self.images_path_list)
 
@@ -114,9 +123,13 @@ class OpenImageDataset(data.Dataset):
         
         bbox = [int(bbox_left), int(bbox_low), int(bbox_right), int(bbox_height)]
 
-   
+        mask_name = random.choice(os.listdir(self.mask_path))
+        mask = Image.open(os.path.join(self.mask_path, mask_name)).convert("L")
+        mask = np.asarray(mask,dtype=np.uint8)
+        mask = self.augmentation2(image=mask)["image"]
+        mask = T.ToTensor()(mask)
+        mask = self.resize(mask)
         ### Get reference image
-        bbox_pad=copy.copy(bbox)
 
         img_p_np=cv2.imread(img_path)
         img_p_np = cv2.cvtColor(img_p_np, cv2.COLOR_BGR2RGB)
@@ -244,6 +257,8 @@ class OpenImageDataset(data.Dataset):
             torch.manual_seed(seed) # needed for torchvision 0.7
             mask_tensor_resize=self.augmentation(mask_tensor_resize)
             
+        if random.uniform(0,1) > self.use_mask:
+            mask_tensor_resize= 1-mask
             
         inpaint_tensor_resize=image_tensor_resize*mask_tensor_resize
 

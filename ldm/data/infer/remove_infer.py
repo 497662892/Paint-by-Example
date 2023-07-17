@@ -94,14 +94,18 @@ class OpenImageDataset(data.Dataset):
         
         ### Generate mask
         image_tensor = get_tensor()(img_p)
-        ref_tensor = self.resize_ref(get_tensor_clip()(img_p))
+        ref_p = img_p
+        # ref_p = Image.open("/home/user01/data/polyp/combine/train/case_M_20181207142726_0U62365120779625_1_002_001-1_Negative_ayy_image000659.jpg").convert("RGB")
+        ref_tensor = self.resize_ref(get_tensor_clip()(ref_p))
         real_mask_tensor = T.ToTensor()(real_mask)
 
-        
-        
+
         image_tensor_resize=self.resize(image_tensor)
         real_mask_tensor_resize=self.resize(real_mask_tensor)
-        real_mask_tensor_resize = F.max_pool2d(real_mask_tensor_resize, kernel_size=15, stride=1, padding=7)
+        #之后可能根据息肉本身的size来进行调配比较好
+        real_mask_tensor_resize = F.max_pool2d(real_mask_tensor_resize, kernel_size=17, stride=1, padding=8)
+        
+        
         
         temp = 1 - real_mask_tensor_resize
         inpaint_tensor_resize=image_tensor_resize*temp

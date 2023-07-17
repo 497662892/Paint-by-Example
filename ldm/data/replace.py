@@ -71,13 +71,15 @@ class OpenImageDataset(data.Dataset):
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.Blur(p=0.3),
-            A.ElasticTransform(p=0.3),
+            A.ElasticTransform(p=0.3,border_mode=cv2.BORDER_CONSTANT),
             A.LongestMaxSize(max_size=224),
             A.PadIfNeeded(min_height=224, min_width=224, border_mode=cv2.BORDER_CONSTANT),
             ])
-        self.augmentation = T.Compose([
-            T.RandomHorizontalFlip(p=0.5),
-            T.RandomVerticalFlip(p=0.5),
+        self.augmentation = A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            A.ShiftScaleRotate(shift_limit=0.1, scale_limit=(-0.2,0.1), rotate_limit=45, p=0.5, border_mode=cv2.BORDER_CONSTANT),
+            A.ElasticTransform(p=0.5,border_mode=cv2.BORDER_CONSTANT),
         ])
         self.resize = T.Resize([self.args['image_size'],self.args['image_size']])
 
@@ -114,28 +116,20 @@ class OpenImageDataset(data.Dataset):
         bbox=random.choice(bbox_list)
         img_p = Image.open(img_path).convert("RGB")
         real_mask = Image.open(real_mask_path).convert("L")
+        img_p = np.asarray(img_p, dtype=np.uint8)
+        real_mask = np.asarray(real_mask,dtype=np.uint8)
 
-   
         ### Get reference image
         bbox_pad=copy.copy(bbox)
         bbox_pad[0]=bbox[0]-min(10,bbox[0]-0)
         bbox_pad[1]=bbox[1]-min(10,bbox[1]-0)
-        bbox_pad[2]=bbox[2]+min(10,img_p.size[0]-bbox[2])
-        bbox_pad[3]=bbox[3]+min(10,img_p.size[1]-bbox[3])
+        bbox_pad[2]=bbox[2]+min(10,img_p.shape[1]-bbox[2])
+        bbox_pad[3]=bbox[3]+min(10,img_p.shape[0]-bbox[3])
         
         img_p_np=cv2.imread(img_path)
         img_p_np = cv2.cvtColor(img_p_np, cv2.COLOR_BGR2RGB)
         ref_image_tensor=img_p_np[bbox_pad[1]:bbox_pad[3],bbox_pad[0]:bbox_pad[2],:]
         
-        # H1 = bbox_pad[3]-bbox_pad[1]
-        # W1 = bbox_pad[2]-bbox_pad[0]
-        # #padding the ref_image_tensor into square with 0
-        # if H1>W1:
-        #     ref_image_tensor=np.pad(ref_image_tensor,((0,0),(int((H1-W1)/2),int((H1-W1)/2)),(0,0)),'constant',constant_values=0)
-        # elif H1<W1:
-        #     ref_image_tensor=np.pad(ref_image_tensor,((int((W1-H1)/2),int((W1-H1)/2)),(0,0),(0,0)),'constant',constant_values=0)
-
-
         ref_image_tensor=self.random_trans(image=ref_image_tensor)
         ref_image_tensor=Image.fromarray(ref_image_tensor["image"])
         
@@ -144,75 +138,23 @@ class OpenImageDataset(data.Dataset):
 
 
         ### Generate mask
+        if self.state=="train":
+            seed = random.randint(0, 2 ** 32)
+            random.seed(seed)
+            np.random.seed(seed)
+            trans = self.augmentation(image=img_p, mask=real_mask)
+            img_p, real_mask = trans["image"],trans["mask"]
+            
         image_tensor = get_tensor()(img_p)
         real_mask_tensor = T.ToTensor()(real_mask)
-        W,H = img_p.size
-
-        extended_bbox=copy.copy(bbox)
-        left_freespace=bbox[0]-0
-        right_freespace=W-bbox[2]
-        up_freespace=bbox[1]-0
-        down_freespace=H-bbox[3]
-        extended_bbox[0]=bbox[0]-random.randint(0,int(0.4*left_freespace))
-        extended_bbox[1]=bbox[1]-random.randint(0,int(0.4*up_freespace))
-        extended_bbox[2]=bbox[2]+random.randint(0,int(0.4*right_freespace))
-        extended_bbox[3]=bbox[3]+random.randint(0,int(0.4*down_freespace))
 
 
-        ### Crop square image
-        if W > H:
-            left_most=extended_bbox[2]-H
-            if left_most <0:
-                left_most=0
-            right_most=extended_bbox[0]+H
-            if right_most > W:
-                right_most=W
-            right_most=right_most-H
-            if right_most<= left_most:
-                image_tensor_cropped=image_tensor
-                real_mask_cropped = real_mask_tensor
-            else:
-                left_pos=random.randint(left_most,right_most) 
-                free_space=min(extended_bbox[1]-0,extended_bbox[0]-left_pos,left_pos+H-extended_bbox[2],H-extended_bbox[3])
-                random_free_space=random.randint(0,int(0.6*free_space))
-                image_tensor_cropped=image_tensor[:,0+random_free_space:H-random_free_space,left_pos+random_free_space:left_pos+H-random_free_space]
-                real_mask_cropped = real_mask_tensor[:,0+random_free_space:H-random_free_space,left_pos+random_free_space:left_pos+H-random_free_space]
-        
-        elif  W < H:
-            upper_most=extended_bbox[3]-W
-            if upper_most <0:
-                upper_most=0
-            lower_most=extended_bbox[1]+W
-            if lower_most > H:
-                lower_most=H
-            lower_most=lower_most-W
-            if lower_most<=upper_most:
-                image_tensor_cropped=image_tensor
-                real_mask_cropped = real_mask_tensor
-            else:
-                upper_pos=random.randint(upper_most,lower_most) 
-                free_space=min(extended_bbox[1]-upper_pos,extended_bbox[0]-0,W-extended_bbox[2],upper_pos+W-extended_bbox[3])
-                random_free_space=random.randint(0,int(0.6*free_space))
-                image_tensor_cropped=image_tensor[:,upper_pos+random_free_space:upper_pos+W-random_free_space,random_free_space:W-random_free_space]
-                real_mask_cropped = real_mask_tensor[:,upper_pos+random_free_space:upper_pos+W-random_free_space,random_free_space:W-random_free_space]
-        else:
-            image_tensor_cropped=image_tensor
-            real_mask_cropped = real_mask_tensor
+        image_tensor_cropped=image_tensor
+        real_mask_cropped = real_mask_tensor
 
         
         image_tensor_resize=self.resize(image_tensor_cropped)
-        real_mask_tensor_resize=self.resize(real_mask_cropped)
-
-        if self.state == "train":
-            seed = np.random.randint(2147483647) # make a seed with numpy generator 
-            random.seed(seed) # apply this seed to img tranfsorms
-            torch.manual_seed(seed) # needed for torchvision 0.7
-            image_tensor_resize = self.augmentation(image_tensor_resize)
-            
-            random.seed(seed) # apply this seed to img tranfsorms
-            torch.manual_seed(seed) # needed for torchvision 0.7
-            real_mask_tensor_resize = self.augmentation(real_mask_tensor_resize)
-        
+        real_mask_tensor_resize=self.resize(real_mask_cropped)        
         
         temp = 1 - real_mask_tensor_resize
         inpaint_tensor_resize=image_tensor_resize*temp

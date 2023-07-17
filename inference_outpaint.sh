@@ -1,10 +1,19 @@
-python scripts/inference_test_bench_new.py \
+#!/bin/bash
+echo "$(date) - Starting" >> ./nohup.log
+
+python scripts/infer/infer_outpaint.py \
 --ddim_steps 100 \
 --ddim_eta 1 \
---outdir results/infer/Kvasir-SEG_10_high \
---config configs/polyp.yaml \
---ckpt /home/majiajian/code/diffusion/Paint-by-Example/logs/Paint-by-Example/2023-06-28T09-56-41_polyp/checkpoints/last.ckpt \
+--outdir results/infer/outpaint_elastic \
+--config configs/outpaint.yaml \
+--ckpt logs/outpaint/2023-07-10T11-53-58_outpaint/checkpoints/last.ckpt \
 --seed 42 \
---reference /home/majiajian/dataset/polyp/Kvasir-SEG/train_10/reference \
---dataset_path /home/majiajian/dataset/polyp/Kvasir-SEG \
+--reference /home/user01/data/polyp/combine/train \
+--dataset_path /home/user01/data/polyp/new_kvasir \
+--H 256 \
+--W 256 \
+--k 4 \
+--random_shift True \
 --scale 5
+
+echo "$(date) - Finishing" >> ./nohup.log

@@ -1,0 +1,11 @@
+python scripts/infer/infer_remove.py \
+--ddim_steps 100 \
+--ddim_eta 1 \
+--outdir results/infer/cluster \
+--config configs/remove.yaml \
+--ckpt logs/remove/2023-07-10T10-31-50_remove/checkpoints/last.ckpt \
+--seed 42 \
+--dataset_path /home/user01/data/polyp/combine/train \
+--H 256 \
+--W 256 \
+--scale 5
