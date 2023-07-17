@@ -79,7 +79,6 @@ class OpenImageDataset(data.Dataset):
         self.augmentation = T.Compose([
             T.RandomHorizontalFlip(p=0.5),
             T.RandomVerticalFlip(p=0.5),
-            T.RandomAffine(degrees=30, translate=(0.1, 0.1), scale=(0.8, 1.2), shear=10, resample=False, fillcolor=0),
         ])
         self.augmentation2 = A.Compose([
             A.HorizontalFlip(p=0.5),
