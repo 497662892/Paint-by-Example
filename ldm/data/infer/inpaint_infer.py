@@ -151,15 +151,22 @@ class OpenImageDataset(data.Dataset):
     def __getitem__(self, index):
         bbox_path=self.bbox_path_list[index]
         file_name=os.path.splitext(os.path.basename(bbox_path))[0]+'.jpg'
+        ref_name = os.path.splitext(os.path.basename(bbox_path))[0] + '_ref_0.jpg'
+        
         real_mask_path=os.path.join(self.args['dataset_dir'], self.state,'masks',file_name)
+        ref_path = os.path.join(self.args['dataset_dir'], self.state, 'reference', ref_name)
         normal_path = np.random.choice(self.normal_path_list)
         
         bbox_list = pickle.load(open(bbox_path, 'rb'))
         bbox = random.choice(bbox_list)
         
+        
         real_mask = Image.open(real_mask_path).convert("L")
+        ref_p = Image.open(ref_path).convert("RGB")
         img_p = Image.open(normal_path).convert("RGB")
         
+        
+        ref_tensor = self.resize_ref(get_tensor_clip()(ref_p))
         real_mask = np.asarray(real_mask)
         real_mask = cv2.morphologyEx(real_mask, cv2.MORPH_CLOSE, self.kernel, iterations=3)
         avail = get_suitible(normal_path)//255
@@ -202,7 +209,7 @@ class OpenImageDataset(data.Dataset):
         temp = 1 - real_mask_tensor_resize
         inpaint_tensor_resize=image_tensor_resize*temp
 
-        return {"GT":image_tensor_resize,"inpaint_image":inpaint_tensor_resize,"inpaint_mask":temp,"real_mask":real_mask_tensor_resize}
+        return {"GT":image_tensor_resize,"inpaint_image":inpaint_tensor_resize,"inpaint_mask":temp,"real_mask":real_mask_tensor_resize,"ref_imgs":ref_tensor}
 
 
 
