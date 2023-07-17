@@ -67,7 +67,7 @@ class OpenImageDataset(data.Dataset):
         self.args=args
         self.arbitrary_mask_percent=arbitrary_mask_percent
         self.kernel = np.ones((1, 1), np.uint8)
-        self.mask_path = os.path.join(args['dataset_dir'], "train_10", 'masks')
+        self.mask_path = os.path.join(args['mask_dir'], "train_10", 'masks')
         self.random_trans=A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
@@ -259,6 +259,9 @@ class OpenImageDataset(data.Dataset):
             
         if random.uniform(0,1) > self.use_mask:
             mask_tensor_resize= 1-mask
+            
+        if random.uniform(0,1) > 0.5:  #50% for outpainting
+            mask_tensor_resize= 1-mask_tensor_resize
             
         inpaint_tensor_resize=image_tensor_resize*mask_tensor_resize
 

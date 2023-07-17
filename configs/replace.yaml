@@ -91,7 +91,7 @@ data:
 
 lightning:
   trainer:
-    max_epochs: 150
+    max_epochs: 200
     num_nodes: 1
     accelerator: 'gpu'
-    gpus: "0"
+    gpus: "6"

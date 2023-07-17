@@ -81,6 +81,7 @@ data:
           params:
               state: train
               dataset_dir: /home/user01/data/polyp/combine
+              mask_dir: /home/user01/data/polyp/new_kvasir
               arbitrary_mask_percent: 0.5
               image_size: 256
       validation:
@@ -88,12 +89,13 @@ data:
           params:
               state: val
               dataset_dir: /home/user01/data/polyp/combine
+              mask_dir: /home/user01/data/polyp/new_kvasir
               arbitrary_mask_percent: 0.5
               image_size: 256
 
 lightning:
   trainer:
-    max_epochs: 20
+    max_epochs: 100
     num_nodes: 1
     accelerator: 'gpu'
-    gpus: "7"
+    gpus: "6"
